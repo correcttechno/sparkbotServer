@@ -16,7 +16,7 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length)
     {
     case WStype_CONNECTED:
         Serial.println("✅ Connected to WSS server");
-        webSocket.sendTXT("connectDevice|"+String(WiFi.macAddress()));
+        webSocket.sendTXT("connect_device|"+String(WiFi.macAddress()));
         break;
 
     case WStype_TEXT:
