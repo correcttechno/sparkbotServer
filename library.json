@@ -19,7 +19,10 @@
   "platforms": [
     "espressif32"
   ],
-  "dependencies": {
-    
-  }
+  "dependencies": [
+    {
+      "name": "PubSubClient",
+      "version": "https://github.com/knolleary/pubsubclient.git"
+    }
+  ]
 }
