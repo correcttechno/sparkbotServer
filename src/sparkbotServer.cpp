@@ -1,55 +1,15 @@
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <WebSocketsClient.h>
 #include <memory.h>
 #include <serverFlash.h>
+#include <PubSubClient.h>
 
-const char *host = "sparkbot.correcttechno.com";
-const int port = 321; // WSS default port
+const char *mqtt_server = "broker.hivemq.com"; // test için public broker
+const int mqtt_port = 1883;
+const char *mqtt_topic_sub = "esp32/test/sub";
+const char *mqtt_topic_pub = "esp32/test/pub";
 
-WebSocketsClient webSocket;
-
-// WebSocket Event fonksiyonu
-void webSocketEvent(WStype_t type, uint8_t *payload, size_t length)
-{
-    switch (type)
-    {
-    case WStype_CONNECTED:
-        Serial.println("✅ Connected to WSS server");
-        webSocket.sendTXT("connect_device|"+String(WiFi.macAddress()));
-        break;
-
-    case WStype_TEXT:
-    {
-        String message = String((char *)payload);
-        Serial.println("📩 Mesaj geldi: " + message);
-        if (message == "update")
-            otaUpdate("otoupdate");
-    }
-    break;
-
-    case WStype_DISCONNECTED:
-        Serial.println("❌ Disconnected");
-        break;
-
-    default:
-        break;
-    }
-}
-
-// WebSocket için ayrı task
-void WebSocketTask(void *pvParameters)
-{
-    // WSS bağlantısı
-    webSocket.beginSSL(host, port, "/");
-    webSocket.onEvent(webSocketEvent);
-
-    while (true)
-    {
-        webSocket.loop();                    // WebSocket işlemleri sürekli dönmeli
-        vTaskDelay(50 / portTICK_PERIOD_MS); // CPU %100 olmaması için küçük delay
-    }
-}
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 void beginWifi(String ssid, String password)
 {
@@ -62,13 +22,82 @@ void beginWifi(String ssid, String password)
     Serial.println("\n📡 WiFi connected");
 }
 
+// MQTT mesaj geldiğinde çalışacak callback fonksiyonu
+void callback(char *topic, byte *payload, unsigned int length)
+{
+    Serial.print("Mesaj geldi [");
+    Serial.print(topic);
+    if(String(topic)=="update"){
+        otaUpdate("otoupdate");
+    }
+    Serial.print("] ");
+    for (int i = 0; i < length; i++)
+    {
+        Serial.print((char)payload[i]);
+    }
+    Serial.println();
+}
+
+// MQTT bağlantısını tekrar kurmak için fonksiyon
+void reconnect()
+{
+    // Bağlantı koparsa tekrar dene
+    while (!client.connected())
+    {
+        Serial.print("MQTT baglantisi deneniyor...");
+        // ClientID benzersiz olmalı
+        String clientId = "ESP32Client-";
+        clientId += String(random(0xffff), HEX);
+
+        if (client.connect(clientId.c_str()))
+        {
+            Serial.println("baglandi");
+            // Abone ol
+            client.subscribe(mqtt_topic_sub);
+        }
+        else
+        {
+            Serial.print("Baglanti hatasi, rc=");
+            Serial.print(client.state());
+            Serial.println(" 5 sn sonra tekrar denenecek");
+            delay(5000);
+        }
+    }
+}
+
+void startCallBack(void *pvParameters)
+{
+    client.setServer(mqtt_server, mqtt_port);
+    client.setCallback(callback);
+
+    for (;;) // Sonsuz döngü ama FreeRTOS uyumlu
+    {
+        if (!client.connected())
+        {
+            reconnect();
+        }
+        client.loop();
+
+        static unsigned long lastMsg = 0;
+        if (millis() - lastMsg > 5000)
+        {
+            lastMsg = millis();
+            String msg = "Merhaba ESP32 MQTT!";
+            client.publish(mqtt_topic_pub, msg.c_str());
+            Serial.println("Mesaj gonderildi: " + msg);
+        }
+
+        vTaskDelay(10 / portTICK_PERIOD_MS); // ✅ FreeRTOS’a nefes aldır
+    }
+}
+
 String startSparkbot(String ssid, String password)
 {
     beginWifi(ssid, password);
     // WebSocket'i Core 0 üzerinde ayrı task olarak başlat
     xTaskCreatePinnedToCore(
-        WebSocketTask, // Fonksiyon
-        "WebSocketTask",
+        startCallBack, // Fonksiyon
+        "startCallBack",
         8192, // Stack size
         NULL, // Parametre
         1,    // Öncelik

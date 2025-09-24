@@ -20,8 +20,6 @@
     "espressif32"
   ],
   "dependencies": {
-    "WebSockets": {
-      "url": "https://github.com/Links2004/arduinoWebSockets.git"
-    }
+    
   }
 }

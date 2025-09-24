@@ -3,8 +3,6 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <WebSocketsClient.h>
 
 // 📌 Dışarıya açılacak fonksiyonlar
 void beginWifi(String ssid, String password);

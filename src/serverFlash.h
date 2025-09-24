@@ -3,21 +3,7 @@
 #include <Update.h>
 
 
-
-
-WiFiClient espClient;
 HTTPClient http;
-
-bool openWifi(String ssid, String password)
-{
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(500);
-        Serial.print(".");
-    }
-    return true;
-}
 
 bool otaUpdate(String filename)
 {
