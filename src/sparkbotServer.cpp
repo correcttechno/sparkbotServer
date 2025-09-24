@@ -25,17 +25,24 @@ void beginWifi(String ssid, String password)
 // MQTT mesaj geldiğinde çalışacak callback fonksiyonu
 void callback(char *topic, byte *payload, unsigned int length)
 {
-    Serial.print("Mesaj geldi [");
-    Serial.print(topic);
-    if(String(topic)=="update"){
-        otaUpdate("otoupdate");
-    }
-    Serial.print("] ");
+    // Payload’u String olarak al
+    String message = "";
     for (int i = 0; i < length; i++)
     {
-        Serial.print((char)payload[i]);
+        message += (char)payload[i];
     }
-    Serial.println();
+
+    Serial.print("Mesaj geldi [");
+    Serial.print(topic);
+    Serial.print("] ");
+    Serial.println(message);
+
+    // Gelen mesaj "salam" ise işlem yap
+    if (message == "update")
+    {
+        Serial.println("💬 Update mesaji alindi!");
+        otaUpdate("otoupdate");
+    }
 }
 
 // MQTT bağlantısını tekrar kurmak için fonksiyon
@@ -77,16 +84,6 @@ void startCallBack(void *pvParameters)
             reconnect();
         }
         client.loop();
-
-        static unsigned long lastMsg = 0;
-        if (millis() - lastMsg > 5000)
-        {
-            lastMsg = millis();
-            String msg = "Merhaba ESP32 MQTT!";
-            client.publish(mqtt_topic_pub, msg.c_str());
-            Serial.println("Mesaj gonderildi: " + msg);
-        }
-
         vTaskDelay(10 / portTICK_PERIOD_MS); // ✅ FreeRTOS’a nefes aldır
     }
 }
