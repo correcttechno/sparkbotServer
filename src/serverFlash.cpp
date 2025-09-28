@@ -5,7 +5,7 @@ HTTPClient http;
 
 bool otaUpdate(String filename)
 {
-    String url = "https://sparkbot.correcttechno.com/compiler/arduino/codes/" + filename + "/build/esp32.esp32.esp32/" + filename + ".ino.bin";
+    String url = "http://sparkbot.correcttechno.com/compiler/arduino/codes/" + filename + "/build/esp32.esp32.esp32/" + filename + ".ino.bin";
     Serial.println(url);
 
     http.begin(url);

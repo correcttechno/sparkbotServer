@@ -2,14 +2,22 @@
 #include <memory.h>
 #include <serverFlash.h>
 #include <PubSubClient.h>
-
-const char *mqtt_server = "broker.hivemq.com"; // test için public broker
+//
+const char *mqtt_server = "sparkbot.correcttechno.com";
 const int mqtt_port = 1883;
-const char *mqtt_topic_sub = "esp32/test/sub";
-const char *mqtt_topic_pub = "esp32/test/pub";
+const char *topic_chunk = "device/123/ota";
+const char *topic_size = "device/123/ota_size";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+
+// Firmware boyutu ve sayaç
+size_t firmware_size = 0;
+size_t received_bytes = 0;
+static int chunk_counter = 0;
+
+// OTA buffer
+static uint8_t otaBuff[1024];
 
 void beginWifi(String ssid, String password)
 {
@@ -22,51 +30,67 @@ void beginWifi(String ssid, String password)
     Serial.println("\n📡 WiFi connected");
 }
 
-// MQTT mesaj geldiğinde çalışacak callback fonksiyonu
-void callback(char *topic, byte *payload, unsigned int length)
+void mqtt_callback(char *topic, byte *payload, unsigned int length)
 {
-    // Payload’u String olarak al
-    String message = "";
-    for (int i = 0; i < length; i++)
+    // Firmware boyutu mesajı
+    if (strcmp(topic, topic_size) == 0)
     {
-        message += (char)payload[i];
+        char buf[20];
+        memcpy(buf, payload, length);
+        buf[length] = '\0';
+        firmware_size = atoi(buf);
+        received_bytes = 0;
+        chunk_counter = 0;
+        Serial.printf("Firmware boyutu alındı: %d byte\n", (int)firmware_size);
+        return;
     }
 
-    Serial.print("Mesaj geldi [");
-    Serial.print(topic);
-    Serial.print("] ");
-    Serial.println(message);
-
-    // Gelen mesaj "salam" ise işlem yap
-    if (message == "update")
+    // Firmware chunk alımı
+    if (!Update.isRunning())
     {
-        Serial.println("💬 Update mesaji alindi!");
-        otaUpdate("otoupdate");
-    }
-}
-
-// MQTT bağlantısını tekrar kurmak için fonksiyon
-void reconnect()
-{
-    // Bağlantı koparsa tekrar dene
-    while (!client.connected())
-    {
-        Serial.print("MQTT baglantisi deneniyor...");
-        // ClientID benzersiz olmalı
-        String clientId = "ESP32Client-";
-        clientId += String(random(0xffff), HEX);
-
-        if (client.connect(clientId.c_str()))
+        if (!Update.begin(firmware_size))
         {
-            Serial.println("baglandi");
-            // Abone ol
-            client.subscribe(mqtt_topic_sub);
+            Serial.printf("Update.begin hatası: %s\n", Update.errorString());
+            return;
+        }
+    }
+
+    size_t written = Update.write(payload, length);
+    received_bytes += written;
+    chunk_counter++;
+    Serial.printf("Chunk #%d alındı: %d byte, toplam: %d/%d\n",
+                  chunk_counter, (int)written, (int)received_bytes, (int)firmware_size);
+
+    // Tüm firmware alındıysa
+    if (received_bytes >= firmware_size)
+    {
+        if (Update.end(true))
+        {
+            Serial.println("OTA tamamlandı! Cihaz yeniden başlatılıyor...");
+            ESP.restart();
         }
         else
         {
-            Serial.print("Baglanti hatasi, rc=");
-            Serial.print(client.state());
-            Serial.println(" 5 sn sonra tekrar denenecek");
+            Serial.printf("Update.end hatası: %s\n", Update.errorString());
+        }
+    }
+}
+
+void reconnect()
+{
+    while (!client.connected())
+    {
+        Serial.print("MQTT broker'a bağlanılıyor...");
+        if (client.connect("ESP32_OTA_Client"))
+        {
+            Serial.println("Bağlandı!");
+            client.subscribe(topic_chunk);
+            client.subscribe(topic_size);
+        }
+        else
+        {
+            Serial.print("Hata, rc=");
+            Serial.println(client.state());
             delay(5000);
         }
     }
@@ -75,7 +99,7 @@ void reconnect()
 void startCallBack(void *pvParameters)
 {
     client.setServer(mqtt_server, mqtt_port);
-    client.setCallback(callback);
+    client.setCallback(mqtt_callback);
 
     for (;;) // Sonsuz döngü ama FreeRTOS uyumlu
     {
