@@ -7,6 +7,7 @@ const char *mqtt_server = "sparkbot.correcttechno.com";
 const int mqtt_port = 1883;
 const char *topic_chunk = "device/123/ota";
 const char *topic_size = "device/123/ota_size";
+const char *topic_serial = "device/123/serial";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -42,6 +43,18 @@ void mqtt_callback(char *topic, byte *payload, unsigned int length)
         received_bytes = 0;
         chunk_counter = 0;
         Serial.printf("Firmware boyutu alındı: %d byte\n", (int)firmware_size);
+        return;
+    }
+
+    if (strcmp(topic, topic_serial) == 0)
+    {
+        String message;
+        for (unsigned int i = 0; i < length; i++)
+        {
+            message += (char)payload[i];
+        }
+        Serial.println("DATA RECIVED: ");
+        Serial.println(message);
         return;
     }
 
@@ -86,6 +99,7 @@ void reconnect()
             Serial.println("Bağlandı!");
             client.subscribe(topic_chunk);
             client.subscribe(topic_size);
+            client.subscribe(topic_serial);
         }
         else
         {
