@@ -96,7 +96,7 @@ void reconnect()
     }
 }
 
-void startCallBack(void *pvParameters)
+void startMQTTClient()
 {
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(mqtt_callback);
@@ -112,18 +112,32 @@ void startCallBack(void *pvParameters)
     }
 }
 
+struct TaskParams
+{
+    String str1;
+    String str2;
+};
+
+void startCallBack(void *pvParameters)
+{
+    TaskParams *params = (TaskParams *)pvParameters;
+    beginWifi(params->str1, params->str2);
+    startMQTTClient();
+}
+
 String startSparkbot(String ssid, String password)
 {
-    beginWifi(ssid, password);
+
+    static TaskParams params = {ssid, password};
     // WebSocket'i Core 0 üzerinde ayrı task olarak başlat
     xTaskCreatePinnedToCore(
         startCallBack, // Fonksiyon
         "startCallBack",
-        8192, // Stack size
-        NULL, // Parametre
-        1,    // Öncelik
-        NULL, // Task handle
-        0     // Core ID (0 veya 1)
+        8192,    // Stack size
+        &params, // Parametre
+        1,       // Öncelik
+        NULL,    // Task handle
+        0        // Core ID (0 veya 1)
     );
     return String(WiFi.macAddress());
 }
